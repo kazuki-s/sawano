@@ -1,5 +1,14 @@
 export default function handler(req, res) {
-  console.log(req.body);  // Vercelのログで確認する用
+  try {
+    const { type, stock } = req.body;
 
-  return res.status(200).json({ message: `受け取ったよ！: ${req.body.stock}` });
+    if (!type || !stock) {
+      return res.status(400).json({ error: 'Missing type or stock' });
+    }
+
+    return res.status(200).json({ message: `受け取ったよ！type: ${type}, stock: ${stock}` });
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
 }
