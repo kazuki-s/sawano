@@ -1,29 +1,30 @@
-// line.js
 export const config = {
   api: {
-    bodyParser: false, // LINE署名検証のために無効化
+    bodyParser: false, // 手動でパースするためにfalse
   },
 };
 
 import { buffer } from 'micro';
 import crypto from 'crypto';
 
-// 🔑 チャネル情報（環境に合わせて書き換え）
-const LINE_CHANNEL_SECRET = 'd9bd6d98a29d04823486e1b56a88aaa7';
-const LINE_CHANNEL_ACCESS_TOKEN = 'jzcN59ozbLmEoRNvZLDqqKR5F5knZfYJshH1WIWzS0/J1Qq3KFNrPAOj38fQSrbBWYZexpcee7ay1FKdFCQR/2XYT0WU/M6DzfpBpig6QQqW/wDya8A/HUutZ6ostNExr74OE+5xGyyEwezl3xH5LAdB04t89/1O/w1cDnyilFU=';
+const LINE_CHANNEL_SECRET = 'd9bd6d98a29d04823486e1b56a88aaa7'; // 🔑 シークレット
+const LINE_CHANNEL_ACCESS_TOKEN = 'jzcN59ozbLmEoRNvZLDqqKR5F5knZfYJshH1WIWzS0/J1Qq3KFNrPAOj38fQSrbBWYZexpcee7ay1FKdFCQR/2XYT0WU/M6DzfpBpig6QQqW/wDya8A/HUutZ6ostNExr74OE+5xGyyEwezl3xH5LAdB04t89/1O/w1cDnyilFU=';  // 🔑 アクセストークン
 
 export default async function handler(req, res) {
+  console.log('✅ リクエスト受信');
+
   if (req.method !== 'POST') {
-    console.warn('⚠️ 非POSTリクエスト:', req.method);
+    console.warn('⚠️ POST以外のリクエスト');
     return res.status(405).send('Method Not Allowed');
   }
 
   let bodyBuffer;
   try {
     bodyBuffer = await buffer(req);
+    console.log('📦 バッファ取得成功');
   } catch (err) {
-    console.error('❌ リクエストのバッファ取得失敗:', err);
-    return res.status(500).send('Failed to read request body');
+    console.error('❌ バッファ読み込み失敗:', err);
+    return res.status(500).send('Buffer read error');
   }
 
   const signature = req.headers['x-line-signature'];
@@ -33,32 +34,33 @@ export default async function handler(req, res) {
     .digest('base64');
 
   if (hash !== signature) {
-    console.warn('⚠️ 署名検証失敗');
+    console.warn('❌ 署名検証失敗');
     return res.status(400).send('Invalid signature');
   }
 
   let body;
   try {
     body = JSON.parse(bodyBuffer.toString());
+    console.log('📝 JSONパース成功');
   } catch (err) {
-    console.error('❌ JSONパース失敗:', err);
+    console.error('❌ JSONパースエラー:', err);
     return res.status(400).send('Invalid JSON');
   }
 
   const event = body.events?.[0];
   if (!event?.replyToken || !event?.message?.text) {
-    console.warn('⚠️ 無効なイベント:', JSON.stringify(body));
+    console.warn('⚠️ 不正なイベント形式');
     return res.status(400).send('Invalid event');
   }
 
-  console.log('✅ メッセージ受信:', event.message.text);
+  const messageText = event.message.text;
+  console.log(`📩 メッセージ内容: ${messageText}`);
 
-  // LINEへの返信処理
   try {
-    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+    const reply = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -66,24 +68,22 @@ export default async function handler(req, res) {
         messages: [
           {
             type: 'text',
-            text: `受け取ったよ！: ${event.message.text}`,
+            text: `受け取ったよ！: ${messageText}`,
           },
         ],
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ LINE返信失敗:', response.status);
-      console.error('📩 レスポンス:', errorText);
+    if (!reply.ok) {
+      const errorText = await reply.text();
+      console.error('❌ LINE返信APIエラー:', errorText);
       return res.status(500).send(errorText);
     }
 
-    console.log('✅ LINE返信成功');
+    console.log('✅ 返信成功');
     res.status(200).send('OK');
-
   } catch (err) {
-    console.error('❌ fetch通信エラー:', err);
+    console.error('❌ 返信処理中にエラー:', err);
     res.status(500).send('Reply failed');
   }
 }
