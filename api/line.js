@@ -1,80 +1,71 @@
-import { json } from 'micro';
-import { createHmac } from 'crypto';
+// api/line.js
 
-// 環境変数から取得
-const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
-const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+import { buffer } from 'micro';
+import crypto from 'crypto';
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+const validateSignature = (rawBody, signature, channelSecret) => {
+  const hash = crypto
+    .createHmac('SHA256', channelSecret)
+    .update(rawBody)
+    .digest('base64');
+  return hash === signature;
+};
 
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
-      res.statusCode = 405;
-      res.end('Method Not Allowed');
-      return;
+      return res.status(405).send('Method Not Allowed');
     }
 
-    const body = await json(req);
     const signature = req.headers['x-line-signature'];
+    const channelSecret = process.env.CHANNEL_SECRET;
+    const channelAccessToken = process.env.CHANNEL_ACCESS_TOKEN;
 
-    const hash = createHmac('sha256', CHANNEL_SECRET)
-      .update(JSON.stringify(body))
-      .digest('base64');
+    const rawBody = await buffer(req);
 
-    if (signature !== hash) {
-      console.log('❌ Invalid signature');
-      res.statusCode = 401;
-      res.end('Unauthorized');
-      return;
+    // 🔐 署名検証
+    if (!validateSignature(rawBody, signature, channelSecret)) {
+      console.error('❌ Invalid signature');
+      return res.status(401).send('❌ Invalid signature');
     }
 
-    console.log('✅ 正常なリクエストを受信');
-    console.log('📦 受信イベント:', JSON.stringify(body, null, 2));
+    const body = JSON.parse(rawBody.toString('utf-8'));
+    console.log('✅ Webhook received:', JSON.stringify(body, null, 2));
 
-    // 検証用イベントはスキップ
-    if (body.events && body.events.length === 0) {
-      console.log('⚠️ 検証用イベントのためスキップ');
-      res.statusCode = 200;
-      res.end('OK');
-      return;
-    }
-
-    for (const event of body.events) {
+    // 🔁 メッセージイベント処理
+    const events = body.events;
+    for (const event of events) {
       if (event.type === 'message' && event.message.type === 'text') {
-        const replyToken = event.replyToken;
-        const userMessage = event.message.text;
-
-        // ログ表示
-        console.log('🗨️ ユーザーのメッセージ:', userMessage);
-
         const replyMessage = {
-          replyToken,
+          replyToken: event.replyToken,
           messages: [
             {
               type: 'text',
-              text: `受け取ったよ！: ${userMessage}`,
+              text: `受け取ったよ！: ${event.message.text}`,
             },
           ],
         };
 
-        const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+        await fetch('https://api.line.me/v2/bot/message/reply', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}`,
+            Authorization: `Bearer ${channelAccessToken}`,
           },
           body: JSON.stringify(replyMessage),
         });
-
-        const responseBody = await response.text();
-        console.log('📨 LINEへの送信結果:', response.status, responseBody);
       }
     }
 
-    res.statusCode = 200;
-    res.end('OK');
+    res.status(200).send('OK');
   } catch (error) {
-    console.error('❗エラーが発生:', error);
-    res.statusCode = 500;
-    res.end('Internal Server Error');
+    console.error('🔥 Error in webhook handler:', error);
+    res.status(500).send('Internal Server Error');
   }
 }
