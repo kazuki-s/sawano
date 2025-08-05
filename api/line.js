@@ -4,11 +4,18 @@ export const config = {
   },
 };
 
-import { buffer } from 'micro';
 import crypto from 'crypto';
 
 const LINE_CHANNEL_SECRET = 'd9bd6d98a29d04823486e1b56a88aaa7';
 const LINE_CHANNEL_ACCESS_TOKEN = 'jzcN59ozbLmEoRNvZLDqqKR5F5knZfYJshH1WIWzS0/J1Qq3KFNrPAOj38fQSrbBWYZexpcee7ay1FKdFCQR/2XYT0WU/M6DzfpBpig6QQqW/wDya8A/HUutZ6ostNExr74OE+5xGyyEwezl3xH5LAdB04t89/1O/w1cDnyilFU=';
+
+async function getRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
 
 export default async function handler(req, res) {
   try {
@@ -17,8 +24,7 @@ export default async function handler(req, res) {
       return res.status(405).send('Method Not Allowed');
     }
 
-    const bodyBuffer = await buffer(req);
-    const bodyText = bodyBuffer.toString();
+    const bodyBuffer = await getRawBody(req);
     const signature = req.headers['x-line-signature'];
 
     const hash = crypto
@@ -31,6 +37,7 @@ export default async function handler(req, res) {
       return res.status(400).send('Invalid signature');
     }
 
+    const bodyText = bodyBuffer.toString();
     const body = JSON.parse(bodyText);
     console.log('📦 Parsed body:', body);
 
