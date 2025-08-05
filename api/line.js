@@ -1,71 +1,60 @@
-// api/line.js
-
-import { buffer } from 'micro';
-import crypto from 'crypto';
-
+// api/notify.js
 export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+  runtime: 'edge',
+}
 
-const validateSignature = (rawBody, signature, channelSecret) => {
-  const hash = crypto
-    .createHmac('SHA256', channelSecret)
-    .update(rawBody)
-    .digest('base64');
-  return hash === signature;
-};
+export default async function handler(req) {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405 })
+  }
 
-export default async function handler(req, res) {
   try {
-    if (req.method !== 'POST') {
-      return res.status(405).send('Method Not Allowed');
+    const body = await req.json()
+    const { type, name, price, current, percent } = body
+
+    const message = generateMessage({ type, name, price, current, percent })
+
+    const token = process.env.CHANNEL_ACCESS_TOKEN
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Missing CHANNEL_ACCESS_TOKEN' }), { status: 500 })
     }
 
-    const signature = req.headers['x-line-signature'];
-    const channelSecret = process.env.CHANNEL_SECRET;
-    const channelAccessToken = process.env.CHANNEL_ACCESS_TOKEN;
+    const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        messages: [{ type: 'text', text: message }],
+      }),
+    })
 
-    const rawBody = await buffer(req);
-
-    // 🔐 署名検証
-    if (!validateSignature(rawBody, signature, channelSecret)) {
-      console.error('❌ Invalid signature');
-      return res.status(401).send('❌ Invalid signature');
+    if (!response.ok) {
+      const errorText = await response.text()
+      return new Response(JSON.stringify({ error: 'LINE API error', detail: errorText }), { status: response.status })
     }
 
-    const body = JSON.parse(rawBody.toString('utf-8'));
-    console.log('✅ Webhook received:', JSON.stringify(body, null, 2));
+    return new Response(JSON.stringify({ status: 'ok' }), { status: 200 })
 
-    // 🔁 メッセージイベント処理
-    const events = body.events;
-    for (const event of events) {
-      if (event.type === 'message' && event.message.type === 'text') {
-        const replyMessage = {
-          replyToken: event.replyToken,
-          messages: [
-            {
-              type: 'text',
-              text: `受け取ったよ！: ${event.message.text}`,
-            },
-          ],
-        };
-
-        await fetch('https://api.line.me/v2/bot/message/reply', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${channelAccessToken}`,
-          },
-          body: JSON.stringify(replyMessage),
-        });
-      }
-    }
-
-    res.status(200).send('OK');
   } catch (error) {
-    console.error('🔥 Error in webhook handler:', error);
-    res.status(500).send('Internal Server Error');
+    return new Response(JSON.stringify({ error: 'Invalid request', detail: error.message }), { status: 400 })
+  }
+}
+
+function generateMessage({ type, name, price, current, percent }) {
+  switch (type) {
+    case 'gosign':
+      return `🚦 Goサイン：${name} にGoサインが出ました！`
+    case 'approaching':
+      return `📉 接近アラート：${name} が逆指値（${price}円）に接近中（現在：${current}円）`
+    case 'explosion':
+      return `💥 爆発予兆：${name} に爆発予兆を検出！（出来高急増＋高値ブレイク）`
+    case 'cutloss':
+      return `🟥 損切り提案：${name} が逆指値に到達（${price}円）→自動損切りを検討してください`
+    case 'pricecheck':
+      return `📊 株価チェック：${name} 現在値：${current}円（${percent >= 0 ? '+' : ''}${percent}%）`
+    default:
+      return `📢 通知：${name} に関するお知らせです`
   }
 }
