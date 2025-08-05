@@ -1,12 +1,8 @@
 {
-  "name": "line-notify-bot",
+  "name": "line-bot",
   "version": "1.0.0",
-  "main": "index.js",
   "type": "module",
-  "scripts": {
-    "dev": "vercel dev"
-  },
   "dependencies": {
-    "axios": "^1.6.8"
+    "micro": "^9.3.4"
   }
 }
