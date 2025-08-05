@@ -1,3 +1,4 @@
+// /api/line.js
 import { createHmac } from 'crypto';
 
 export default async function handler(req, res) {
@@ -10,6 +11,10 @@ export default async function handler(req, res) {
 
   const channelSecret = process.env.LINE_CHANNEL_SECRET;
 
+  if (!channelSecret) {
+    return res.status(500).json({ error: 'Missing LINE_CHANNEL_SECRET' });
+  }
+
   const hash = createHmac('SHA256', channelSecret)
     .update(body)
     .digest('base64');
@@ -19,7 +24,16 @@ export default async function handler(req, res) {
   }
 
   const events = req.body.events;
+
+  const channelAccessToken = process.env.CHANNEL_ACCESS_TOKEN;
+
+  if (!channelAccessToken) {
+    return res.status(500).json({ error: 'Missing CHANNEL_ACCESS_TOKEN' });
+  }
+
   for (const event of events) {
+    if (!event.replyToken || !event.message || !event.message.text) continue;
+
     const replyToken = event.replyToken;
     const userMessage = event.message.text;
 
@@ -32,8 +46,6 @@ export default async function handler(req, res) {
         }
       ]
     };
-
-    const channelAccessToken = process.env.CHANNEL_ACCESS_TOKEN;
 
     await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
