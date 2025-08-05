@@ -1,32 +1,38 @@
 export default async function handler(req, res) {
   if (req.method === 'POST') {
-    const token = 'ここにチャネルアクセストークン';
-    const message = req.body.message;
+    const token = 'あなたのチャネルアクセストークン（長期）';
 
-    const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+    const replyToken = req.body.events?.[0]?.replyToken;
+    const receivedMessage = req.body.events?.[0]?.message?.text;
+
+    if (!replyToken || !receivedMessage) {
+      return res.status(400).json({ success: false, error: 'Invalid payload' });
+    }
+
+    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        replyToken: replyToken,
         messages: [
           {
             type: 'text',
-            text: message
+            text: `あなたのメッセージ: ${receivedMessage}`
           }
         ]
-      })
+      }),
     });
 
     if (response.ok) {
       res.status(200).json({ success: true });
     } else {
-      const errorData = await response.json();
-      console.error('LINE API error:', errorData);
-      res.status(500).json({ success: false, error: errorData });
+      const errorText = await response.text();
+      res.status(500).json({ success: false, error: errorText });
     }
   } else {
-    res.status(405).end(); // Method Not Allowed
+    res.status(405).json({ error: 'Method Not Allowed' });
   }
 }
