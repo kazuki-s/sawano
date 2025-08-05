@@ -1,61 +1,41 @@
-// /api/line.js
-import { createHmac } from 'crypto';
-
+// /api/notify.js
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const signature = req.headers['x-line-signature'];
-  const body = JSON.stringify(req.body);
+  const { type, stock, message } = req.body;
 
-  const channelSecret = process.env.LINE_CHANNEL_SECRET;
-
-  if (!channelSecret) {
-    return res.status(500).json({ error: 'Missing LINE_CHANNEL_SECRET' });
+  if (!message) {
+    return res.status(400).json({ error: 'Missing message in body' });
   }
 
-  const hash = createHmac('SHA256', channelSecret)
-    .update(body)
-    .digest('base64');
-
-  if (hash !== signature) {
-    return res.status(401).json({ error: 'Invalid signature' });
-  }
-
-  const events = req.body.events;
-
-  const channelAccessToken = process.env.CHANNEL_ACCESS_TOKEN;
-
-  if (!channelAccessToken) {
-    return res.status(500).json({ error: 'Missing CHANNEL_ACCESS_TOKEN' });
-  }
-
-  for (const event of events) {
-    if (!event.replyToken || !event.message || !event.message.text) continue;
-
-    const replyToken = event.replyToken;
-    const userMessage = event.message.text;
-
-    const responseMessage = {
-      replyToken,
-      messages: [
-        {
-          type: 'text',
-          text: `受け取ったよ！: ${userMessage}`
-        }
-      ]
-    };
-
-    await fetch('https://api.line.me/v2/bot/message/reply', {
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${channelAccessToken}`
+        'Authorization': `Bearer ${process.env.CHANNEL_ACCESS_TOKEN}`,
       },
-      body: JSON.stringify(responseMessage)
+      body: JSON.stringify({
+        messages: [
+          {
+            type: 'text',
+            text: message
+          }
+        ]
+      })
     });
-  }
 
-  res.status(200).send('OK');
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({ error: 'LINE API error', details: errorText });
+    }
+
+    return res.status(200).json({ success: true, sent: message });
+
+  } catch (error) {
+    console.error('Notify Error:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
 }
