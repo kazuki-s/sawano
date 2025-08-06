@@ -5,7 +5,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const msg = req.body?.message || '（メッセージがありません）';
+    // JSON bodyのパース（Vercelでは自動で req.body に格納される）
+    const { message } = req.body || {};
+
+    if (!message) {
+      res.status(400).json({ error: 'メッセージが未定義です' });
+      return;
+    }
 
     const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
@@ -17,7 +23,7 @@ export default async function handler(req, res) {
         messages: [
           {
             type: 'text',
-            text: msg,
+            text: message,
           },
         ],
       }),
