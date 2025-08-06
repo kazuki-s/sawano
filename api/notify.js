@@ -1,43 +1,35 @@
-export const config = {
-  runtime: 'nodejs',
-};
-
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
-    const { message } = await req.json(); // JSONボディからmessageを抽出
+    const { type, stock } = req.body;
 
-    if (!message || typeof message !== 'string') {
-      console.error('❌ 無効なメッセージ形式:', message);
-      return res.status(400).json({ error: 'Invalid message format' });
-    }
+    const message = type === "gosign"
+      ? `${stock} に Goサインが出ました！`
+      : `${stock} の通知タイプ（${type}）が届きました。`;
 
-    const token = process.env.LINE_NOTIFY_TOKEN; // 環境変数からトークンを取得
-    if (!token) {
-      console.error('❌ LINE_NOTIFY_TOKENが未設定です');
-      return res.status(500).json({ error: 'Missing LINE_NOTIFY_TOKEN' });
-    }
+    const token = process.env.LINE_ACCESS_TOKEN;
 
-    const payload = new URLSearchParams({ message });
-
-    const notifyRes = await fetch('https://notify-api.line.me/api/notify', {
-      method: 'POST',
+    const response = await fetch("https://notify-api.line.me/api/notify", {
+      method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Bearer ${token}`,
       },
-      body: payload,
+      body: `message=${encodeURIComponent(message)}`
     });
 
-    const responseText = await notifyRes.text();
-    console.log('✅ 通知成功:', responseText);
-
-    if (!notifyRes.ok) {
-      return res.status(500).json({ error: responseText });
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ error: "LINE通知に失敗しました", detail: text });
     }
 
     return res.status(200).json({ success: true });
+
   } catch (err) {
-    console.error('❌ 通知エラー:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("通知エラー:", err);
+    return res.status(500).json({ error: "サーバーエラー", detail: err.message });
   }
 }
