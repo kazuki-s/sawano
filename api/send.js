@@ -1,6 +1,5 @@
 // /api/send.ts
-import { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +14,7 @@ export async function POST(req: NextRequest) {
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json; charset=UTF-8', // ← ここ重要！
+        'Content-Type': 'application/json; charset=UTF-8',
         Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
       },
       body: JSON.stringify({
@@ -42,8 +41,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// 🔧 サニタイズ関数（できるだけ変更せず文字を通す）
 function sanitizeMessage(message: string): string {
   if (!message || typeof message !== 'string') return '（メッセージなし）';
-  return message.trim();
+  return message.normalize('NFC').trim();
 }
