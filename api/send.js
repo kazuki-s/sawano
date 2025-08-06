@@ -1,5 +1,5 @@
 // /api/send.ts
-import type { NextRequest } from 'next/server';
+import { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json; charset=UTF-8', // ✅ これ追加
+        'Content-Type': 'application/json; charset=UTF-8', // ← ここ重要！
         Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
       },
       body: JSON.stringify({
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ✅ 特殊文字が入ってもそのまま通す（全角・絵文字OK）
+// 🔧 サニタイズ関数（できるだけ変更せず文字を通す）
 function sanitizeMessage(message: string): string {
   if (!message || typeof message !== 'string') return '（メッセージなし）';
   return message.trim();
