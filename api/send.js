@@ -1,5 +1,3 @@
-// /pages/api/send.js
-
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -12,21 +10,22 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing message or userId' });
     }
 
-    // ✨ UTF-8で使えない文字を除外するサニタイズ処理（最強版）
+    // ✅ サニタイズ処理（UTF-8でByte > 255 の文字を除外）
     const sanitizeMessage = (text) => {
-      return Array.from(text)
-        .filter(char => {
-          try {
-            const bytes = new TextEncoder().encode(char);
-            return bytes.length <= 3; // LINE APIが受け付ける最大バイト数（emoji除外）
-          } catch {
-            return false;
-          }
-        })
-        .join('');
+      const encoder = new TextEncoder();
+      return Array.from(text).filter(char => {
+        try {
+          const encoded = encoder.encode(char);
+          // 1文字が4バイト超えないかつ255以下（undiciのByteString対応）
+          return encoded.every(byte => byte <= 255);
+        } catch {
+          return false;
+        }
+      }).join('');
     };
 
     const safeMessage = sanitizeMessage(message);
+    console.log("Sanitized:", safeMessage); // ✅ ログ確認用
 
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
@@ -51,6 +50,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({ success: true });
+
   } catch (error) {
     console.error('Unhandled Error:', error);
     return res.status(500).json({ error: 'Internal Server Error', details: error.message });
