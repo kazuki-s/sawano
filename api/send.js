@@ -1,16 +1,16 @@
-export default async function handler(req, res) {
+export const config = {
+  runtime: "edge",
+};
+
+export default async function handler(req) {
   try {
-    if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method Not Allowed' });
-    }
+    const { message, userId } = await req.json();
 
-    const { message, userId } = req.body;
+    // ログ出力（デバッグ用）
+    console.log("Raw message:", message);
+    console.log("Raw userId:", userId);
 
-    if (!message || !userId) {
-      return res.status(400).json({ error: 'Missing message or userId' });
-    }
-
-    // ✅ ここでByteString変換可能な文字だけに制限
+    // ByteString制限対応（1文字ずつcodePointで判定）
     const sanitizeMessage = (text) => {
       return Array.from(text).filter(char => {
         const code = char.codePointAt(0);
@@ -21,32 +21,45 @@ export default async function handler(req, res) {
     const safeMessage = sanitizeMessage(message);
     console.log("Sanitized:", safeMessage);
 
-    const response = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
+    const res = await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.LINE_ACCESS_TOKEN}`
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.LINE_ACCESS_TOKEN}`,
       },
       body: JSON.stringify({
         to: userId,
         messages: [
           {
-            type: 'text',
-            text: safeMessage
-          }
-        ]
-      })
+            type: "text",
+            text: safeMessage,
+          },
+        ],
+      }),
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      return res.status(500).json({ error: 'LINE API Error', details: error });
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("LINE API error:", errorText);
+      return new Response(JSON.stringify({ error: "Failed to send LINE message", details: errorText }), {
+        status: res.status,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    return res.status(200).json({ success: true });
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
 
   } catch (error) {
-    console.error('Unhandled Error:', error);
-    return res.status(500).json({ error: 'Internal Server Error', details: error.message });
+    console.error("Unhandled Error:", error);
+    return new Response(JSON.stringify({
+      error: "Internal Server Error",
+      details: error.message,
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }
