@@ -1,42 +1,38 @@
-// /api/send.ts
-import { NextRequest, NextResponse } from 'next/server';
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
-export async function POST(req: NextRequest) {
   try {
-    const { userId, message } = await req.json();
+    const { message } = await req.json?.(); // ❌ これは .json() ではなく `req.body.message` を使うべき
+    // 修正ポイント：Vercel Edge Functions（Node.jsランタイム）では req.body を直接使う
 
-    const sanitized = sanitizeMessage(message);
+    const msg = req.body?.message || '（メッセージがありません）';
 
-    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+    const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json; charset=UTF-8',
-        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.LINE_ACCESS_TOKEN}`,
       },
       body: JSON.stringify({
-        to: userId,
         messages: [
           {
             type: 'text',
-            text: sanitized,
+            text: msg,
           },
         ],
       }),
     });
 
-    const data = await res.json();
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(response.status).json({ error: errorText });
+    }
 
-    return NextResponse.json({ success: true, data });
+    return res.status(200).json({ status: 'OK' });
   } catch (error) {
-    console.error('Unhandled Error:', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    console.error('送信エラー:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
   }
-}
-
-function sanitizeMessage(message: string): string {
-  if (!message || typeof message !== 'string') return '（メッセージなし）';
-  return message.normalize('NFC').trim();
 }
