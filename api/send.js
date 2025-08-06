@@ -10,15 +10,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing message or userId' });
     }
 
-    // ✅ 安全なメッセージ（全角記号を除去 or 半角へ）
+    // 💡 全角記号・非ASCIIを削除（65288含むすべての問題文字を除去）
     const sanitizeMessage = (text) => {
       return text
-        .replace(/[！-～]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)) // 全角→半角
-        .replace(/[“”‘’〈〉《》「」『』【】（）［］｛｝]/g, '') // 全角カッコ類除去
-        .replace(/[^\x00-\x7F]/g, ''); // その他非ASCII文字も一旦除去（UTF-8安全化）
+        .replace(/[^\x20-\x7E]/g, ''); // ASCII範囲外（\x00〜\x1F, \x7F〜）を全部除去
     };
 
     const safeMessage = sanitizeMessage(message);
+
+    console.log('Raw Message:', message);
+    console.log('Sanitized:', safeMessage);
 
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
