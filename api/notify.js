@@ -1,54 +1,63 @@
 export default async function handler(req, res) {
+  // ① POST以外は拒否
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
-    const { type, stock } = req.body;
+    // ② リクエストボディをJSONとして読み取る
+    const body = await req.json();
+    const { type, stock } = body;
 
+    if (!type || !stock) {
+      return res.status(400).json({ error: 'Missing type or stock' });
+    }
+
+    // ③ 通知メッセージをタイプ別に生成（全角記号は使わない！）
     let message = '';
-
-    // 通知タイプごとにメッセージを構成（全角記号なし／ASCII中心）
     switch (type) {
       case 'gosign':
-        message = `Go sign issued for ${stock}.`;
+        message = `Go sign issued for ${stock}`;
         break;
       case 'alert':
-        message = `${stock} is close to the stop price.`;
+        message = `Price alert for ${stock}`;
         break;
-      case 'trigger':
-        message = `${stock} shows signs of a breakout.`;
-        break;
-      case 'cut':
-        message = `${stock} hit the stop price. Consider exiting.`;
+      case 'cutloss':
+        message = `Stop-loss triggered for ${stock}`;
         break;
       case 'check':
-        message = `Current price check: ${stock}.`;
+        message = `Current value checked for ${stock}`;
         break;
       default:
-        message = `Unknown alert type for ${stock}.`;
+        message = `Notification for ${stock}`;
         break;
     }
 
-    const token = process.env.LINE_ACCESS_TOKEN;
+    // ④ LINE Notify のアクセストークン（秘密）
+    const token = 'jzcN59ozbLmEoRNvZLDqqKR5F5knZfYJshH1WIWzS0/J1Qq3KFNrPAOj38fQSrbBWYZexpcee7ay1FKdFCQR/2XYT0WU/M6DzfpBpig6QQqW/wDya8A/HUutZ6ostNExr74OE+5xGyyEwezl3xH5LAdB04t89/1O/w1cDnyilFU=';
 
-    const response = await fetch('https://notify-api.line.me/api/notify', {
+    // ⑤ LINE Notify に送信（x-www-form-urlencoded）
+    const resNotify = await fetch('https://notify-api.line.me/api/notify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': `Bearer ${token}`,
       },
-      body: `message=${encodeURIComponent(message)}`,
+      body: `message=${encodeURIComponent(message)}`, // ← 全角禁止対策あり
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`LINE Notify failed: ${text}`);
+    // ⑥ 応答確認
+    if (!resNotify.ok) {
+      const errText = await resNotify.text();
+      console.error('通知エラー:', errText);
+      return res.status(500).json({ error: 'Failed to notify LINE' });
     }
 
-    return res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('通知エラー:', error.message);
-    return res.status(500).json({ error: error.message });
+    // ⑦ 成功時の応答
+    return res.status(200).json({ success: true, message });
+
+  } catch (err) {
+    console.error('サーバーエラー:', err);
+    return res.status(500).json({ error: 'Server error' });
   }
 }
