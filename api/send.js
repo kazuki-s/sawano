@@ -5,11 +5,7 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, message } = await req.json();
 
-    console.log('Raw userId:', userId);
-    console.log('Raw message:', message);
-
     const sanitized = sanitizeMessage(message);
-    console.log('Sanitized:', sanitized);
 
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
@@ -29,7 +25,6 @@ export async function POST(req: NextRequest) {
     });
 
     const data = await res.json();
-    console.log('LINE API response:', data);
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
