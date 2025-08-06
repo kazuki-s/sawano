@@ -10,22 +10,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing message or userId' });
     }
 
-    // ✅ サニタイズ処理（UTF-8でByte > 255 の文字を除外）
+    // ✅ ByteStringに変換可能な文字だけを抽出（0〜255の範囲に収まるか）
     const sanitizeMessage = (text) => {
-      const encoder = new TextEncoder();
       return Array.from(text).filter(char => {
-        try {
-          const encoded = encoder.encode(char);
-          // 1文字が4バイト超えないかつ255以下（undiciのByteString対応）
-          return encoded.every(byte => byte <= 255);
-        } catch {
-          return false;
-        }
+        const code = char.codePointAt(0);
+        return code !== undefined && code <= 255;
       }).join('');
     };
 
     const safeMessage = sanitizeMessage(message);
-    console.log("Sanitized:", safeMessage); // ✅ ログ確認用
+    console.log("Sanitized:", safeMessage);
 
     const response = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
