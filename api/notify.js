@@ -1,70 +1,43 @@
+export const config = {
+  runtime: 'nodejs',
+};
+
 export default async function handler(req, res) {
-  // ① POST以外は拒否
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
   try {
-    // ② リクエストボディを直接使う
-    const body = req.body;
-    const { type, stock } = body;
+    const { message } = await req.json(); // JSONボディからmessageを抽出
 
-    if (!type || !stock) {
-      return res.status(400).json({ error: 'Missing type or stock' });
+    if (!message || typeof message !== 'string') {
+      console.error('❌ 無効なメッセージ形式:', message);
+      return res.status(400).json({ error: 'Invalid message format' });
     }
 
-    // ③ 通知メッセージを生成（全角記号なし）
-    let message = '';
-    switch (type) {
-      case 'gosign':
-        message = `Go sign issued for ${stock}`;
-        break;
-      case 'alert':
-        message = `Price alert for ${stock}`;
-        break;
-      case 'cutloss':
-        message = `Stop-loss triggered for ${stock}`;
-        break;
-      case 'check':
-        message = `Current value checked for ${stock}`;
-        break;
-      default:
-        message = `Notification for ${stock}`;
-        break;
+    const token = process.env.LINE_NOTIFY_TOKEN; // 環境変数からトークンを取得
+    if (!token) {
+      console.error('❌ LINE_NOTIFY_TOKENが未設定です');
+      return res.status(500).json({ error: 'Missing LINE_NOTIFY_TOKEN' });
     }
 
-    // ④ アクセストークン
-    const token = 'jzcN59ozbLmEoRNvZLDqqKR5F5knZfYJshH1WIWzS0/J1Qq3KFNrPAOj38fQSrbBWYZexpcee7ay1FKdFCQR/2XYT0WU/M6DzfpBpig6QQqW/wDya8A/HUutZ6ostNExr74OE+5xGyyEwezl3xH5LAdB04t89/1O/w1cDnyilFU=';
+    const payload = new URLSearchParams({ message });
 
-    // ⑤ LINE Notify へ送信
-    const resNotify = await fetch('https://notify-api.line.me/api/notify', {
+    const notifyRes = await fetch('https://notify-api.line.me/api/notify', {
       method: 'POST',
       headers: {
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Bearer ${token}`,
       },
-      body: `message=${encodeURIComponent(message)}`,
+      body: payload,
     });
 
-    if (!resNotify.ok) {
-      const errText = await resNotify.text();
-      console.error('通知エラー:', errText);
-      return res.status(500).json({ error: 'Failed to notify LINE' });
+    const responseText = await notifyRes.text();
+    console.log('✅ 通知成功:', responseText);
+
+    if (!notifyRes.ok) {
+      return res.status(500).json({ error: responseText });
     }
 
-    return res.status(200).json({ success: true, message });
-
+    return res.status(200).json({ success: true });
   } catch (err) {
-    console.error('サーバーエラー:', err);
-    return res.status(500).json({ error: 'Server error' });
+    console.error('❌ 通知エラー:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
-
-// 🔧 API設定（ボディをJSONとして受け取る）
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '1mb',
-    },
-  },
-};
