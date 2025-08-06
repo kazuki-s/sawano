@@ -10,10 +10,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing message or userId' });
     }
 
-    // 💡 全角記号・非ASCIIを削除（65288含むすべての問題文字を除去）
+    // 💡 UTF-8で表現できない文字を削除（ByteStringエラー対策）
     const sanitizeMessage = (text) => {
-      return text
-        .replace(/[^\x20-\x7E]/g, ''); // ASCII範囲外（\x00〜\x1F, \x7F〜）を全部除去
+      return Array.from(text)
+        .filter(char => {
+          try {
+            return new TextEncoder().encode(char).length <= 3; // UTF-8範囲内
+          } catch {
+            return false;
+          }
+        })
+        .join('');
     };
 
     const safeMessage = sanitizeMessage(message);
