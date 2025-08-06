@@ -10,7 +10,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing message or userId' });
     }
 
-    // ✅ ByteStringに変換可能な文字だけを抽出（0〜255の範囲に収まるか）
+    // ✅ ここでByteString変換可能な文字だけに制限
     const sanitizeMessage = (text) => {
       return Array.from(text).filter(char => {
         const code = char.codePointAt(0);
