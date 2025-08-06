@@ -1,4 +1,4 @@
-// /api/send (pages/api/send.ts)
+// /api/send.ts
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=UTF-8', // ✅ これ追加
         Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
       },
       body: JSON.stringify({
@@ -35,15 +35,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Unhandled Error:', error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
   }
 }
 
+// ✅ 特殊文字が入ってもそのまま通す（全角・絵文字OK）
 function sanitizeMessage(message: string): string {
-  const sanitized = message
-    .split('')
-    .filter((char) => char.charCodeAt(0) <= 255)
-    .join('');
-
-  return sanitized || '（メッセージ内容なし）';
+  if (!message || typeof message !== 'string') return '（メッセージなし）';
+  return message.trim();
 }
