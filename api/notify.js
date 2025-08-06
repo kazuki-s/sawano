@@ -3,51 +3,50 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const { type, stock } = req.body;
+
+  if (!type || !stock) {
+    return res.status(400).json({ error: 'Missing type or stock' });
+  }
+
+  const token = process.env.LINE_ACCESS_TOKEN;
+
+  // メッセージテンプレート（絵文字や全角記号を避ける or encodeURI）
+  let message = '';
+
+  if (type === 'gosign') {
+    message = `ZETAにGoサインが出ました！`; // 括弧や全角は避けた
+  } else if (type === 'alert') {
+    message = `${stock} が逆指値に接近中！監視を強化してください`;
+  } else if (type === 'spike') {
+    message = `${stock} に出来高急増＋高値ブレイクあり！爆発予兆検出`;
+  } else {
+    message = `${stock} に通知が届きました（種類: ${type}）`;
+  }
+
   try {
-    const { type, stock } = req.body;
-
-    if (!type || !stock) {
-      return res.status(400).json({ error: 'Missing type or stock' });
-    }
-
-    let message;
-
-    // タイプごとのメッセージ生成
-    switch (type) {
-      case 'gosign':
-        message = `🚀 ${stock}が爆発しそう！監視強化！`;
-        break;
-      case 'alert':
-        message = `⚠️ ${stock}が逆指値に接近中！注意！`;
-        break;
-      case 'stop':
-        message = `🛑 ${stock}が逆指値到達。損切り提案。`;
-        break;
-      case 'test':
-        message = `受け取ったよ！: ${stock}`;
-        break;
-      default:
-        message = `🔔 ${stock}に通知：${type}`;
-    }
-
-    // LINE Notifyへの送信
-    const lineRes = await fetch('https://notify-api.line.me/api/notify', {
+    const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.LINE_ACCESS_TOKEN}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
-      body: new URLSearchParams({ message }),
+      body: JSON.stringify({
+        messages: [{
+          type: 'text',
+          text: message
+        }]
+      })
     });
 
-    if (!lineRes.ok) {
-      const errorText = await lineRes.text();
-      throw new Error(`LINE送信エラー: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`LINE通知エラー: ${errorText}`);
     }
 
-    res.status(200).json({ status: 'ok', sent: message });
+    res.status(200).json({ status: 'ok', message: '通知送信成功！' });
   } catch (error) {
-    console.error('通知エラー:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error('通知エラー:', error.message);
+    res.status(500).json({ error: '通知送信に失敗しました', detail: error.message });
   }
 }
