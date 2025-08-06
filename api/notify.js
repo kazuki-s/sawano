@@ -3,50 +3,52 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { type, stock } = req.body;
-
-  if (!type || !stock) {
-    return res.status(400).json({ error: 'Missing type or stock' });
-  }
-
-  const token = process.env.LINE_ACCESS_TOKEN;
-
-  // メッセージテンプレート（絵文字や全角記号を避ける or encodeURI）
-  let message = '';
-
-  if (type === 'gosign') {
-    message = `ZETAにGoサインが出ました！`; // 括弧や全角は避けた
-  } else if (type === 'alert') {
-    message = `${stock} が逆指値に接近中！監視を強化してください`;
-  } else if (type === 'spike') {
-    message = `${stock} に出来高急増＋高値ブレイクあり！爆発予兆検出`;
-  } else {
-    message = `${stock} に通知が届きました（種類: ${type}）`;
-  }
-
   try {
-    const response = await fetch('https://api.line.me/v2/bot/message/broadcast', {
+    const { type, stock } = req.body;
+
+    let message = '';
+
+    // 通知タイプごとにメッセージを構成（全角記号なし／ASCII中心）
+    switch (type) {
+      case 'gosign':
+        message = `Go sign issued for ${stock}.`;
+        break;
+      case 'alert':
+        message = `${stock} is close to the stop price.`;
+        break;
+      case 'trigger':
+        message = `${stock} shows signs of a breakout.`;
+        break;
+      case 'cut':
+        message = `${stock} hit the stop price. Consider exiting.`;
+        break;
+      case 'check':
+        message = `Current price check: ${stock}.`;
+        break;
+      default:
+        message = `Unknown alert type for ${stock}.`;
+        break;
+    }
+
+    const token = process.env.LINE_ACCESS_TOKEN;
+
+    const response = await fetch('https://notify-api.line.me/api/notify', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        messages: [{
-          type: 'text',
-          text: message
-        }]
-      })
+      body: `message=${encodeURIComponent(message)}`,
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`LINE通知エラー: ${errorText}`);
+      const text = await response.text();
+      throw new Error(`LINE Notify failed: ${text}`);
     }
 
-    res.status(200).json({ status: 'ok', message: '通知送信成功！' });
+    return res.status(200).json({ success: true });
   } catch (error) {
     console.error('通知エラー:', error.message);
-    res.status(500).json({ error: '通知送信に失敗しました', detail: error.message });
+    return res.status(500).json({ error: error.message });
   }
 }
