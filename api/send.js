@@ -1,71 +1,51 @@
-// 安全な文字列に変換する（全角→半角＋ASCII外除去）
-function sanitizeText(text) {
-  return text
-    .normalize("NFKC") // 全角→半角英数字記号へ変換
-    .replace(/[（]/g, "(")
-    .replace(/[）]/g, ")")
-    .replace(/[｛]/g, "{")
-    .replace(/[｝]/g, "}")
-    .replace(/[＜]/g, "<")
-    .replace(/[＞]/g, ">")
-    .replace(/[［]/g, "[")
-    .replace(/[］]/g, "]")
-    .replace(/[　]/g, " ")
-    .replace(/[^\x00-\x7F]/g, ""); // ASCII範囲外を削除
-}
-
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
-  }
-
   try {
-    // 外部から送られた文字列は一切使わず、固定文を送る
-    const rawMessage = "テスト（強制サニタイズ）チャトちゃん通知";
-    const message = sanitizeText(rawMessage);
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method Not Allowed' });
+    }
 
-    // ログで変換結果を明示
-    console.log("💬 Raw Message:", rawMessage);
-    console.log("💬 Sanitized:", message);
+    const { message, userId } = req.body;
 
-    // かずきくんのLINE User ID
-    const userId = "U965e48c6b9d5cc3ae80e112f0d665357";
+    if (!message || !userId) {
+      return res.status(400).json({ error: 'Missing message or userId' });
+    }
 
-    // LINE Messaging APIにPush通知
-    const response = await fetch("https://api.line.me/v2/bot/message/push", {
-      method: "POST",
+    // ✅ 安全なメッセージ（全角記号を除去 or 半角へ）
+    const sanitizeMessage = (text) => {
+      return text
+        .replace(/[！-～]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)) // 全角→半角
+        .replace(/[“”‘’〈〉《》「」『』【】（）［］｛｝]/g, '') // 全角カッコ類除去
+        .replace(/[^\x00-\x7F]/g, ''); // その他非ASCII文字も一旦除去（UTF-8安全化）
+    };
+
+    const safeMessage = sanitizeMessage(message);
+
+    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.LINE_ACCESS_TOKEN}`
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.LINE_ACCESS_TOKEN}`
       },
       body: JSON.stringify({
         to: userId,
         messages: [
           {
-            type: "text",
-            text: message
+            type: 'text',
+            text: safeMessage
           }
         ]
       })
     });
 
-    // LINE APIの応答確認
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ LINE API ERROR:", errorText);
-      return res.status(500).json({
-        error: "LINE API Error",
-        details: errorText
-      });
+      const error = await response.text();
+      return res.status(500).json({ error: 'LINE API Error', details: error });
     }
 
     return res.status(200).json({ success: true });
 
-  } catch (err) {
-    console.error("💥 Unexpected Error:", err);
-    return res.status(500).json({
-      error: "Internal Server Error",
-      details: err.message
-    });
+  } catch (error) {
+    console.error('Unhandled Error:', error);
+    return res.status(500).json({ error: 'Internal Server Error', details: error.message });
   }
 }
