@@ -5,15 +5,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ② リクエストボディをJSONとして読み取る
-    const body = await req.json();
+    // ② リクエストボディを直接使う
+    const body = req.body;
     const { type, stock } = body;
 
     if (!type || !stock) {
       return res.status(400).json({ error: 'Missing type or stock' });
     }
 
-    // ③ 通知メッセージをタイプ別に生成（全角記号は使わない！）
+    // ③ 通知メッセージを生成（全角記号なし）
     let message = '';
     switch (type) {
       case 'gosign':
@@ -33,27 +33,25 @@ export default async function handler(req, res) {
         break;
     }
 
-    // ④ LINE Notify のアクセストークン（秘密）
+    // ④ アクセストークン
     const token = 'jzcN59ozbLmEoRNvZLDqqKR5F5knZfYJshH1WIWzS0/J1Qq3KFNrPAOj38fQSrbBWYZexpcee7ay1FKdFCQR/2XYT0WU/M6DzfpBpig6QQqW/wDya8A/HUutZ6ostNExr74OE+5xGyyEwezl3xH5LAdB04t89/1O/w1cDnyilFU=';
 
-    // ⑤ LINE Notify に送信（x-www-form-urlencoded）
+    // ⑤ LINE Notify へ送信
     const resNotify = await fetch('https://notify-api.line.me/api/notify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': `Bearer ${token}`,
       },
-      body: `message=${encodeURIComponent(message)}`, // ← 全角禁止対策あり
+      body: `message=${encodeURIComponent(message)}`,
     });
 
-    // ⑥ 応答確認
     if (!resNotify.ok) {
       const errText = await resNotify.text();
       console.error('通知エラー:', errText);
       return res.status(500).json({ error: 'Failed to notify LINE' });
     }
 
-    // ⑦ 成功時の応答
     return res.status(200).json({ success: true, message });
 
   } catch (err) {
@@ -61,3 +59,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server error' });
   }
 }
+
+// 🔧 API設定（ボディをJSONとして受け取る）
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '1mb',
+    },
+  },
+};
